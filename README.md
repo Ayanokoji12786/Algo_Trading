@@ -191,17 +191,63 @@ is no separate "simplified" paper-trading implementation. A dedicated parity tes
 
 ## Getting started
 
-Requires Python 3.10+.
+This works on any laptop (macOS, Windows, or Linux) — nobody needs an account, an API key, or
+a server to try it. It's a public repo, so anyone can get their own copy running in a few
+minutes.
+
+### 0. Prerequisites (skip anything you already have)
+
+- **Python 3.10 or newer.** Check with `python3 --version` (macOS/Linux) or `python --version`
+  (Windows). If you need to install it: [python.org/downloads](https://www.python.org/downloads/)
+  — on Windows, tick "Add Python to PATH" during setup.
+- **Git.** Check with `git --version`. If missing: [git-scm.com/downloads](https://git-scm.com/downloads).
+  (macOS users can also just run `git --version` once and let it offer to install the Xcode
+  command-line tools.)
+
+### 1. Get the code onto your laptop
 
 ```bash
-cd "Trading BOT 2.0"
+git clone https://github.com/Ayanokoji12786/Algo_Trading.git
+cd Algo_Trading
+```
+
+(No GitHub account needed to clone a public repo — this works for anyone.)
+
+### 2. Create an isolated Python environment and install
+
+```bash
 python3 -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
+```
+
+Activate it — the command differs by shell:
+
+```bash
+source .venv/bin/activate        # macOS / Linux (bash/zsh)
+.venv\Scripts\activate           # Windows (Command Prompt)
+.venv\Scripts\Activate.ps1       # Windows (PowerShell)
+```
+
+Your terminal prompt should now show `(.venv)` at the start of the line. Then install:
+
+```bash
 pip install -e ".[dev]"
 ```
 
-That installs the package in editable mode plus `pytest`. No external services, API keys, or
-accounts are needed for anything below — everything runs against synthetic data out of the box.
+That's the entire setup. It installs this project plus `pytest`, isolated in `.venv` so it
+never touches anything else on your machine. No external services, API keys, or accounts are
+needed for anything below — everything runs against synthetic data out of the box.
+
+### 3. Confirm it works
+
+```bash
+python -m pytest -q
+```
+
+You should see `202 passed` after roughly a minute and a half. That's the whole "is my
+install correct" check.
+
+Whenever you come back to a fresh terminal later, you only need to repeat the **activate**
+command from step 2 (not the whole install) before running anything below.
 
 ## Running it
 
