@@ -1,8 +1,8 @@
 {
-  "deflated_sharpe_probability": 3.748317405095302e-143,
-  "sharpe_benchmark_from_multiple_testing": 0.1824936741414139,
+  "deflated_sharpe_probability": 0.999970290042107,
+  "sharpe_benchmark_from_multiple_testing": 0.17986353514195344,
   "n_trials": 41,
   "n_observations": 6259,
-  "skew": 0.017043583413151115,
-  "excess_kurtosis": 0.17151291683428793
+  "skew": -0.027457589015000384,
+  "excess_kurtosis": 0.14951974966292303
 }

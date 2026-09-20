@@ -164,14 +164,42 @@ The user chose **one blended universe** (NSE+MCX combined with the existing glob
 
 ## 3.1 Synthetic-Data Result and a Data-Construction Bias Worth Flagging Loudly
 
-Running `cli/run_india_blended_backtest.py` against the default synthetic config (2010-2023, 64 NSE-style equities, 7 MCX-style commodities) produced:
+**Numbers below are from the corrected run** after fixing the cross-process
+reproducibility bug described in §3.2 (Python's built-in `hash()` on
+strings is randomized per process; an earlier run of this same command, in
+a different process, produced different numbers from "the same" config —
+see §3.2). Running `cli/run_india_blended_backtest.py` against the default
+synthetic config (2010-2023, 64 NSE-style equities, 7 MCX-style
+commodities) now reproducibly produces:
 
 | | Sharpe | Note |
 |---|---|---|
-| Blended (EQ_MOM_01 + MCX_TREND_01, 50:50) | −0.068 | |
-| EQ_MOM_01 standalone | +0.024 | roughly flat |
-| MCX_TREND_01 standalone | −0.199 | negative, similar whipsaw pattern to the global-futures system's own synthetic result |
-| **MCX_CARRY_01 standalone** | **+0.919** | passes all three implemented activation-gate criteria |
+| Blended (EQ_MOM_01 + MCX_TREND_01, 50:50) | −0.217 | |
+| EQ_MOM_01 standalone | +0.071 | roughly flat |
+| MCX_TREND_01 standalone | −0.593 | negative, similar whipsaw pattern to the global-futures system's own synthetic result |
+| **MCX_CARRY_01 standalone** | **+1.142** | passes all three implemented activation-gate criteria |
+
+### 3.2 Bug Found and Fixed: Non-Deterministic Synthetic Data Across Processes
+
+`data/synthetic.py`, `data/synthetic_equity.py`, `data/synthetic_curve.py`,
+and `strategies/carry.py` all derived a per-symbol RNG seed via
+`hash(symbol) % N`, using Python's *built-in* `hash()`. Since Python 3.3,
+string hashing is randomized per process (`PYTHONHASHSEED`) unless
+explicitly fixed — meaning "the same `random_seed=42` config" silently
+produced *different* fabricated data every time a fresh process ran it.
+This was caught by re-running the (nominally identical) robustness suite in
+a separate process and finding a materially different baseline Sharpe.
+Fixed with a SHA256-based `stable_hash()` (`trading_system/util.py`),
+verified by a new regression test
+(`tests/integration/test_cross_process_reproducibility.py`) that spawns two
+Python processes with *different* `PYTHONHASHSEED` values and asserts
+byte-identical output. This directly violated Prompt.md §28's
+reproducibility requirement and is exactly the kind of defect this
+project's own testing discipline exists to catch — flagged here rather than
+silently corrected without a trace. The qualitative pattern of every result
+already discussed in this document (blended negative, MCX trend negative,
+carry strongly positive due to the data-construction bias in §3.1) held
+before and after the fix; only the precise figures changed.
 
 **The MCX_CARRY_01 result must not be read as evidence carry "works."** It is very likely a **synthetic-data construction artifact**: the carry signal (`data/synthetic_curve.py`'s regime-switching `basis_slope`) is read *directly and contemporaneously* from today's front/next contract prices, with zero estimation lag. The trend signals, by contrast, are backward-looking averages over 21-252 day windows that necessarily lag behind a regime change. Since the synthetic generator's regimes are genuinely persistent (by construction, to give trend something to detect), carry's zero-lag read of that same persistence detects it far more cleanly than trend's lagged-average read does — an asymmetry in how the fabricated data happens to be constructed, not a finding about real commodity curves. The activation gate correctly identified a strong, low-correlation, cost-surviving signal and said "activate" — which shows the **gate mechanics work as designed** — but `IndiaSystemConfig`'s hard safeguard (§ below) still keeps `mcx_carry_01`'s risk share at zero in the actual blended portfolio, exactly as intended: a synthetic-data pass is not sufficient grounds for a real-data decision, and none was made here.
 

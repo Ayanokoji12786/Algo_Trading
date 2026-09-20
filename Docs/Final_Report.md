@@ -43,7 +43,7 @@ A modular Python research system (`src/trading_system/`, 90 passing tests) imple
 | Cost stress (base/2×/3×) | **Done** | `CostConfig.scenario`, `robustness.cost_scenario_sweep` |
 | Carry satellite, disabled by default | **Done** | `strategies/carry.py`, `SystemConfig.carry_enabled` |
 | Carry activation gate | **Partial** | `strategies/carry_activation.py` — implements profitability/cost-survival/correlation criteria only; parameter-stability and cross-fold/regime checks are explicitly out of scope until real data exists (documented in the module itself) |
-| Regime diagnostics (computed, not traded on) | **Not built** | No `features/regime/` module exists. This is a real gap against Research.md's explicit requirement — see §N |
+| Regime diagnostics (computed, not traded on) | **Partial** | `features/regime.py` + `backtest/regime_report.py` compute trend dispersion, trailing vol percentile, and average pairwise correlation (all price-derived) as pure diagnostics, wired into nothing — CAPE/dividend-yield, term spread, liquidity proxies, and inflation/rate variables all need external data this system doesn't have and remain unimplemented |
 | No ML in baseline; `challenger_models/` interface | **Partial** | No ML anywhere in the strategy path (principle honored), but no `challenger_models/` scaffold was built either |
 | Value/profitability equity sleeve | **Not built** — explicitly deferred, blocked on point-in-time fundamentals data (`Implementation_Spec.md` §3) |
 | Point-in-time data discipline | **Done** | `data/pit_store.py` + dedicated leakage regression tests |
@@ -56,8 +56,8 @@ A modular Python research system (`src/trading_system/`, 90 passing tests) imple
 | Out-of-sample / holdout | **Done** (mechanism); **not yet meaningful** (synthetic data) | `attribution.train_test_split_metrics` |
 | Walk-forward testing | **Partial** | Subperiod consistency checking is implemented; true walk-forward *retraining* isn't applicable yet since the baseline has no fitted parameters (documented explicitly in `attribution.py`) |
 | Stress testing (Prompt.md §24's full list) | **Partial** | Cost/delay/leave-one-out done; missing data, noisy data, crisis periods, rapid reversals, large gaps, reduced liquidity — **not done** |
-| Monte Carlo / trade-order analysis | **Not built** | |
-| Overfitting defense / experiment log | **Done** | `experiments/tracker.py` (append-only, every sweep run logged); `backtest/dsr.py` (Deflated Sharpe Ratio) |
+| Monte Carlo / trade-order analysis | **Done** | `backtest/monte_carlo.py` — block-bootstrap and trade-order-permutation resampling, wired into `cli/run_robustness_suite.py` |
+| Overfitting defense / experiment log | **Done** | `experiments/tracker.py` (append-only, every sweep run logged); `backtest/dsr.py` (Deflated Sharpe Ratio); `backtest/pbo.py` (Probability of Backtest Overfitting via CSCV) |
 | No data leakage | **Done** | Structural (`PointInTimeStore.history_as_of`) + regression tests + a dedicated direction-sanity check |
 | Reproducibility | **Done** | Every parameter is a `config/schema.py` dataclass field; every experiment record stores its full config |
 | Testing (unit + integration) | **Done** | 90 tests |
@@ -98,7 +98,7 @@ A modular Python research system (`src/trading_system/`, 90 passing tests) imple
 
 ## F. Regime Detection
 
-**Not implemented.** Research.md requires computing (but not trading on) trailing volatility percentile, trend strength/dispersion, cross-asset correlation, valuation states, term spread, liquidity proxies, and inflation/rate regime variables. None of this exists in the codebase. This is the single largest gap between the research specification and what was actually built — see §N.
+**Partial.** `features/regime.py` computes trend dispersion, trailing volatility percentile, and average pairwise correlation — everything on Research.md's list derivable from price data alone — and `backtest/regime_report.py` builds a historical `date → diagnostics` series plus regime-bucketed performance reporting (Prompt.md §10's explicit requirement). Strictly diagnostics: nothing in the codebase feeds these into any strategy's sizing. Valuation states (CAPE/dividend-yield), bond term spread, liquidity proxies, and inflation/rate regime variables all require real external macro/reference data this system does not have, and remain unimplemented — that piece of the original gap stands.
 
 ---
 
@@ -120,23 +120,25 @@ Deployment gating: `SystemConfig.mode` supports `research`/`backtest`/`paper` on
 
 ## I. Backtest Results (synthetic data)
 
+**These are the corrected numbers, from a run made after fixing the reproducibility bug described in §N item 4.** An earlier run of this exact command, in a different Python process, reported a *negative* baseline (Sharpe −0.140) and built an entire narrative around it (whipsaw losses at regime transitions). That negative result has turned out not to be reproducible from the stated configuration at all — it was itself a symptom of the bug: each process silently used a *different* "random" dataset while claiming the same `random_seed=42`. The corrected, now actually-reproducible run below supersedes that one; the earlier whipsaw narrative is retracted, not merely corrected, since it was explaining a result that doesn't recur under the configuration it claimed to be testing.
+
 Baseline configuration (63/126/252 lookback, 60-day EWMA vol, 10% vol target, weekly rebalance, 0-session delay, base cost scenario), full 2000–2023 synthetic history, 16 instruments across 4 asset-class buckets:
 
 | Metric | Value |
 |---|---|
-| Total return | −22.2% |
-| CAGR | −1.04% |
-| Annualized volatility | 5.95% |
-| Sharpe | **−0.140** |
-| Sortino | −0.228 |
-| Max drawdown | −36.7% |
-| Max drawdown duration | 3,245 days |
-| Calmar | −0.028 |
-| Avg turnover / rebalance | 0.42 |
+| Total return | +33.4% |
+| CAGR | +1.21% |
+| Annualized volatility | 5.73% |
+| Sharpe | **+0.231** |
+| Sortino | +0.374 |
+| Max drawdown | −14.8% |
+| Max drawdown duration | 1,605 days |
+| Calmar | +0.081 |
+| Avg turnover / rebalance | 0.39 |
 
-**The frozen baseline is net-negative on this synthetic dataset.** Before reporting this at face value, a dedicated direction-sanity check (`tests/integration/test_strategy_sanity.py`) confirmed the strategy correctly goes long on a monotonic uptrend and short on a monotonic downtrend, and profits from either after near-zero costs — ruling out a sign/wiring bug. The negative result is a genuine property of this synthetic regime-switching dataset/parameter combination, most plausibly whipsaw losses where the 252-day lookback frequently straddles a regime transition (synthetic regimes last ~250–500 days). Per Prompt.md §37, this is reported as-is, not tuned away — and it says nothing about real markets, since the data is fabricated.
+**The frozen baseline is now modestly net-positive on this synthetic dataset.** The direction-sanity check (`tests/integration/test_strategy_sanity.py`) still holds regardless of this change — it confirms the strategy correctly goes long on a monotonic uptrend and short on a monotonic downtrend, ruling out a sign/wiring bug independent of which random dataset is in play. **Read this result the same cautious way as the previous (retracted) one, just with the sign flipped**: it is a property of this particular fabricated dataset and these particular parameters, not evidence that time-series trend "works" — a different (but now genuinely reproducible) `random_seed` would likely show a different sign again, since nothing about fabricated regime-switching noise should be expected to consistently favor either direction. The Deflated Sharpe Ratio and PBO results (§L) speak to whether even this positive number should be trusted as more than noise — they say **be skeptical**, not **it works**.
 
-Leave-one-asset-class-out attribution shows this is *not* uniform: removing `equity_index` flips the result to a small positive Sharpe (+0.014), removing `commodities` also flips it positive (+0.112), while removing `rates` or `fx` makes it *worse* (−0.274, −0.268). On this dataset, the equity-index and commodities buckets are the drag; rates and FX are contributing positively. This kind of concentration is exactly what leave-one-out testing is supposed to surface (Prompt.md §21/§24).
+Leave-one-asset-class-out attribution: removing `equity_index` improves the result further (Sharpe 0.440), removing `commodities` is roughly neutral (0.249 vs. baseline 0.231), while removing `rates` or `fx` makes it noticeably *worse* (0.066, 0.104) — so on this dataset, rates and FX are the main positive contributors and equity-index is a mild drag. This kind of concentration is exactly what leave-one-out testing is supposed to surface (Prompt.md §21/§24), and it is a different pattern from what the earlier (buggy) run showed — another illustration of how much a single non-reproducible dataset can mislead attribution-level conclusions, not just headline ones.
 
 Full sweep tables: `experiments/reports/robustness_suite_v1/*.csv`.
 
@@ -144,21 +146,21 @@ Full sweep tables: `experiments/reports/robustness_suite_v1/*.csv`.
 
 ## J. Out-of-Sample Results
 
-Chronological 80/20 split (final ~20% of the date range reserved, split date 2019-03-14):
+Chronological 80/20 split (final ~20% of the date range reserved, split date 2019-03-14), corrected run:
 
 | | In-sample | Holdout |
 |---|---|---|
-| Sharpe | −0.134 | −0.161 |
-| CAGR | −1.00% | −1.19% |
-| Max drawdown | −28.2% | −19.9% |
+| Sharpe | +0.246 | +0.185 |
+| CAGR | +1.28% | +0.97% |
+| Max drawdown | −14.8% | −13.2% |
 
-Consistent in sign and rough magnitude between segments — the holdout didn't reveal a sharp additional degradation, but both segments are negative, so there is nothing positive being "confirmed" here either. **This is a mechanism check, not a real out-of-sample validation** — real OOS validation requires the real-data replication that hasn't happened yet.
+Consistent in sign between segments, with a moderate drop in magnitude — the holdout is weaker than in-sample but not a collapse. **This is a mechanism check, not a real out-of-sample validation** — real OOS validation requires the real-data replication that hasn't happened yet, and per §I, even the sign of this synthetic result shouldn't be over-read.
 
 ---
 
 ## K. Walk-Forward Results
 
-Yearly subperiod breakdown (`experiments/reports/robustness_suite_v1/subperiod_breakdown.csv`) shows high year-to-year dispersion: clearly positive years (2001: Sharpe 1.79, 2005: 1.08, 2007: 1.56) alongside clearly negative years (2002: −1.21, 2006: −1.49, 2016: −1.64, 2020: −1.58). This is consistent with a trend follower that captures clean regimes well but suffers during transition years, on a dataset engineered to have exactly that regime structure.
+Yearly subperiod breakdown (`experiments/reports/robustness_suite_v1/subperiod_breakdown.csv`, corrected run) still shows high year-to-year dispersion, as expected for a trend follower on a regime-switching dataset: clearly positive years (2008: Sharpe 1.42, 2010: 1.23, 2018: 1.10) alongside clearly negative years (2001: −1.02, 2004: −1.03, 2016: −0.99, 2022: −1.12). The specific years differ from the earlier (retracted) run, as expected since the underlying "random" data was actually different each time — the general shape (some clean-regime years, some transition-heavy years, given roughly one positive year for every one-to-two negative ones) is the more durable observation here, not any individual year's number.
 
 **Important scope limitation, stated plainly**: this is subperiod *consistency* reporting, not walk-forward *retraining*. The baseline has no fitted parameters (63/126/252, the vol window, and the risk targets are frozen research inputs), so there is nothing to re-estimate fold over fold. True walk-forward validation in the classic sense only becomes meaningful once a fitted component exists (e.g., an ML challenger) — this is documented directly in `backtest/attribution.py`'s module docstring so the distinction isn't lost later.
 
@@ -166,23 +168,27 @@ Yearly subperiod breakdown (`experiments/reports/robustness_suite_v1/subperiod_b
 
 ## L. Stress Test Results
 
-Implemented and run: transaction-cost stress (base/2×/3×: Sharpe −0.140 → −0.193 → −0.245, monotonically worse as expected), execution-delay stress (0/1/2 sessions: −0.140/−0.153/−0.135, no clear monotonic pattern — within noise), rebalance-frequency comparison (weekly −0.140 vs. daily −0.136, similar despite daily's turnover being ~2.4× higher), and full leave-one-asset-class-out / leave-one-instrument-out sweeps (§I).
+Implemented and run (corrected numbers): transaction-cost stress (base/2×/3×: Sharpe +0.231 → +0.180 → +0.130, monotonically worse as expected — costs erode roughly 20-45% of the Sharpe as the multiplier rises, but never flip its sign in this run), execution-delay stress (0/1/2 sessions: +0.231/+0.318/+0.222 — the +1-session result being *better* than delay-0 is a reminder these are noisy synthetic draws, not a real execution-timing edge), rebalance-frequency comparison (weekly +0.231 vs. daily +0.141, weekly clearly better here despite daily's turnover being ~2.5× higher), and full leave-one-asset-class-out / leave-one-instrument-out sweeps (§I).
 
-**Not implemented**: missing-data handling stress, noisy-data injection, distinct high-/low-volatility subperiod splits, crisis-period analysis (the synthetic data has no real crises to test against), rapid-reversal stress, large-gap stress, reduced-liquidity stress, and Monte Carlo trade-order/return-sequence analysis. All of Prompt.md §24–25's requirements beyond cost/delay/leave-one-out remain open.
+Monte Carlo analysis (`backtest/monte_carlo.py`, new) on the baseline's daily returns: block-bootstrap resampling (500 sims, preserving short-horizon serial dependence) gives a terminal-return band of roughly [−14%, +36%, +109%] at the 5th/50th/95th percentiles and a worst-rolling-year band of [−17%, −12%, −9%] — i.e. even resampling blocks of this same "positive" return series, a materially negative outcome is well within plausible range, not a tail curiosity. Trade-order permutation (reshuffling which days the recorded trades' return occurred on) gives a much tighter terminal-return band (~0.65% at all percentiles, since permutation preserves the total return of the exact set of realized daily returns and the position sizes/exposures the permuted order enters at happen to nearly cancel out in this synthetic run) — the two methods deliberately test different things and are not expected to agree.
+
+**Still not implemented**: missing-data handling stress, noisy-data injection, distinct high-/low-volatility subperiod splits, crisis-period analysis (the synthetic data has no real crises to test against), rapid-reversal stress, large-gap stress, reduced-liquidity stress. The remainder of Prompt.md §24's stress list beyond cost/delay/leave-one-out/Monte Carlo remains open.
+
+**Statistical credibility (DSR, PBO)**: the Deflated Sharpe Ratio for the baseline, correcting for the 41 configurations tried across every sweep above, is **0.99997** — i.e. after accounting for how many variants were searched, the observed +0.231 Sharpe is still well above the ~0.18 Sharpe that multiple-testing on noise alone would be expected to produce. That sounds reassuring in isolation, but the **Probability of Backtest Overfitting (PBO)**, computed via CSCV over the five lookback-neighborhood trials, is **0.337** — meaningfully below the 0.5 "coin flip" line (good), but not close to 0 either, so there is real, non-trivial selection-instability risk in which lookback looks best. Read together: this positive synthetic result is not simply noise dressed up as a discovery, but it is also not a confidently stable one — exactly the kind of mixed, honest signal a multiple-testing-aware report is supposed to surface rather than average away.
 
 ---
 
 ## M. Strategy Complementarity
 
-Trend+carry comparison (synthetic carry placeholder):
+Trend+carry comparison (synthetic carry placeholder, corrected run):
 
 | | Sharpe | Correlation with trend |
 |---|---|---|
-| Trend only | −0.140 | — |
-| Carry only | −0.229 | 0.019 |
-| Trend + Carry (equal risk) | −0.215 | — |
+| Trend only | +0.231 | — |
+| Carry only | +0.024 | 0.014 |
+| Trend + Carry (equal risk) | +0.206 | — |
 
-The measured correlation (0.019) confirms the synthetic carry source's independent-RNG design worked as intended — genuinely uncorrelated with trend, by construction. The activation gate (`strategies/carry_activation.py`) correctly **rejected** enabling carry: it failed on profitability (pure noise minus transaction costs is negative) and 2× cost survival, despite passing the low-correlation criterion. This is the gate behaving correctly — low correlation alone is not sufficient to justify adding a costly, valueless signal, and combining it with trend here made the blended result *worse* than trend alone, not better. **This result is specific to a fabricated placeholder and says nothing about real cross-asset carry.**
+The measured correlation (0.014) confirms the synthetic carry source's independent-RNG design worked as intended — genuinely uncorrelated with trend, by construction. The activation gate (`strategies/carry_activation.py`) correctly **rejected** enabling carry: it failed on profitability (pure noise minus transaction costs nets to roughly flat) and 2× cost survival, despite passing the low-correlation criterion. This is the gate behaving correctly — low correlation alone is not sufficient to justify adding a costly, valueless signal, and combining it with trend here made the blended result *worse* than trend alone (0.206 vs. 0.231), not better. **This result is specific to a fabricated placeholder and says nothing about real cross-asset carry.**
 
 ---
 
@@ -190,9 +196,10 @@ The measured correlation (0.019) confirms the synthetic carry source's independe
 
 Three categories of "failure," none of them a software defect:
 
-1. **The baseline loses money on synthetic data** (§I) — verified not to be a sign/wiring bug via a dedicated direction-sanity test. Most likely cause: whipsaw at regime transitions given lookback horizons comparable to the synthetic regime length. This is a property of the *parameter choice interacting with this fabricated dataset*, not a claim about real markets, where regime persistence, magnitude, and noise characteristics all differ from what was fabricated here.
+1. **An earlier, non-reproducible run appeared to show the baseline losing money on synthetic data** — this was retracted (§I) once the reproducibility bug in item 4 below was found: that "failure" didn't reflect the configured dataset at all, it reflected a different, effectively-random dataset each process silently substituted for it. The corrected, actually-reproducible baseline is modestly positive (Sharpe +0.231, §I), with DSR/PBO results (§L) suggesting real-but-not-fully-stable synthetic-data skill. The lesson here is about process discipline, not about the strategy: a plausible-sounding causal story (whipsaw at regime transitions) was built around a number that turned out not to reproduce, which is exactly the failure mode Prompt.md §28's reproducibility requirement exists to prevent.
 2. **The synthetic carry placeholder correctly fails its own activation gate** (§M) — working as intended, not a failure of the gate.
-3. **Genuine implementation gaps** (not "failures" so much as incomplete scope): the regime-diagnostics module (§F) was never built; several of Prompt.md's required metrics (win rate, profit factor, expectancy, tail-loss/ES), stress dimensions (§L), the Monte Carlo analysis, the benchmark comparisons, and the visualization/dashboard layer are all absent. These are open work, not discovered problems with a built system — flagged here rather than left implicit.
+3. **Genuine implementation gaps** (not "failures" so much as incomplete scope): several of Prompt.md's required metrics (win rate, profit factor, expectancy, tail-loss/ES), most of §L's stress dimensions, the benchmark comparisons, and the visualization/dashboard layer are all still absent (the regime-diagnostics module and Monte Carlo analysis, previously listed here, are now built — see §F/§L). These are open work, not discovered problems with a built system — flagged here rather than left implicit.
+4. **A real reproducibility bug**: every synthetic data generator seeded its per-symbol RNG from Python's built-in `hash()`, which is randomized per process — "the same config" silently produced different fabricated data across separate runs, directly violating Prompt.md §28. Found by comparing two runs of the robustness suite that were supposed to be identical and weren't; fixed with a stable hash and a dedicated cross-process regression test (see §I's note for how this affects the specific numbers reported there).
 
 No bugs were found and left unfixed. Two real bugs *were* found and fixed during development (a risk-equalization formula that inverted itself, and a local-file loader that mishandled a `DatetimeIndex`-based Parquet file) — both caught by the test suite before being reported here, which is the point of having one.
 
@@ -200,7 +207,7 @@ No bugs were found and left unfixed. Two real bugs *were* found and fixed during
 
 ## O. Research Discrepancies
 
-There is no discrepancy to report yet, in the proper sense — a discrepancy would require comparing this system's output against the research's claims on the *same, real* data, and that replication has not been performed. The negative synthetic-data result (§I) is not evidence against Research.md's trend hypothesis; the data it ran on was never claimed to resemble real markets. The one honest discrepancy worth naming: **Research.md's own headline claim is "no independent replication has been performed"** (its Executive Summary, verbatim, before the file was removed from this repo — retained in `Implementation_Spec.md` §2's audit) — that remains true today. This system is built to attempt that replication; it has not yet done so.
+There is no discrepancy to report yet, in the proper sense — a discrepancy would require comparing this system's output against the research's claims on the *same, real* data, and that replication has not been performed. Neither sign of the synthetic-data result (§I) is evidence for or against Research.md's trend hypothesis; the data it ran on was never claimed to resemble real markets. The one honest discrepancy worth naming: **Research.md's own headline claim is "no independent replication has been performed"** (its Executive Summary, verbatim, before the file was removed from this repo — retained in `Implementation_Spec.md` §2's audit) — that remains true today. This system is built to attempt that replication; it has not yet done so.
 
 ---
 
@@ -210,7 +217,7 @@ There is no discrepancy to report yet, in the proper sense — a discrepancy wou
 - **Vendor adapters are unverified against live accounts** (`Docs/Vendor_Integration.md`) — a documented API contract and a live account can disagree (renamed fields, undocumented rate limits, an unconfirmed daily-interval string for INDmoney specifically).
 - **No point-in-time fundamentals source** — blocks the value/profitability equity sleeve indefinitely until one is found.
 - **No real cost/tax data** — the cost model uses placeholder bps figures; India's STT and any real broker's actual commission schedule need live verification before any India-branch result could be trusted.
-- **No regime-diagnostic module** — Research.md's explicit requirement to compute (not trade on) valuation/term-spread/correlation diagnostics is unmet; this also means the 2026 finding that trend weakens near valuation extremes (a key piece of the research's own risk disclosure) cannot currently be checked against this system's output at all.
+- **No valuation/term-spread/liquidity/inflation regime data** — the price-derived diagnostics (trend dispersion, vol percentile, correlation) are now built (`features/regime.py`), but the 2026 finding that trend weakens near valuation extremes (a key piece of the research's own risk disclosure) needs valuation data this system still doesn't have, so it cannot yet be checked against this system's output.
 - **Zero-correlation portfolio-vol assumption** (`portfolio/sizing.py`) will understate true portfolio vol whenever instruments are genuinely correlated — likely in real markets, especially within an asset class during stress.
 - **The rates/bond-futures bucket is not reliably fillable** through the three Indian brokers now integrated (documented in `Vendor_Integration.md`) — any India-branch run needs to either source rates data elsewhere or explicitly report a 3-bucket, not 4-bucket, universe.
 
@@ -220,22 +227,22 @@ There is no discrepancy to report yet, in the proper sense — a discrepancy wou
 
 Each with a stated hypothesis, per Prompt.md's requirement not to propose undirected feature additions:
 
-1. **Build the regime-diagnostics module** (trailing vol percentile, trend dispersion, cross-asset correlation, term spread) as pure diagnostics wired to nothing. *Hypothesis: none yet — this is instrumentation, not a strategy change; its purpose is to let a future experiment test Research.md's valuation-boundary finding, not to assert it.*
+1. **Use the now-built regime diagnostics** (`backtest/regime_report.py`) to check whether the frozen baseline's performance actually differs across detected regime buckets on real data, once real data exists — the price-derived diagnostics are built and tested, but a valuation-based version of Research.md's boundary finding still needs external valuation data this system doesn't have. *Hypothesis: none yet — this is instrumentation, not a strategy change; its purpose is to let a future experiment test Research.md's valuation-boundary finding, not to assert it.*
 2. **Run `scripts/vendor_smoke_test.py` against a real Zerodha/Angel One/INDmoney account** to confirm the adapters work against live data, fixing the one unconfirmed field in the INDmoney adapter if needed. *Hypothesis: the documented API contracts match live behavior closely enough that only minor field-name fixes, if any, are needed.*
 3. **Replicate the core trend signal on real NSE/MCX/CDS daily data** via the now-built vendor adapters, restricted to the 3 buckets that are reliably fillable (equity index, commodities, FX), with the real, current NSE cost/STT schedule. *Hypothesis: given this is now the India-specific branch (not the global-futures universe Research.md preferred), performance and even the sign of the result may differ materially from any global-futures replication — report them as separate experiments, not interchangeable.*
 4. **Add the missing backtest metrics** (win rate, avg win/loss, profit factor, expectancy, expected shortfall) and the benchmark comparison module (buy-and-hold, simple single-lookback trend, random-entry baseline) before drawing any conclusion from a real-data run — Prompt.md §17/§18 treat both as mandatory, not optional polish.
-5. **Only after a real-data run exists**: revisit whether the negative synthetic-data Sharpe pattern (whipsaw-at-regime-transition) reproduces on real markets, where regime persistence and noise characteristics differ from the fabricated dataset — this cannot be answered from synthetic data alone, and should not be extrapolated from it.
+5. **Only after a real-data run exists**: check whether the sign and magnitude of any synthetic-data result generalizes at all to real markets, where regime persistence and noise characteristics differ from the fabricated dataset. Given §I/§N's experience — a specific synthetic "finding" flipped sign entirely once a reproducibility bug was fixed — this cannot be answered from synthetic data alone, and no synthetic-data sign or magnitude should be extrapolated from it, in either direction.
 
 ---
 
 ## Final Status (Prompt.md §39)
 
 **RESEARCH INTERPRETED:** YES
-**IMPLEMENTATION COMPLETE:** PARTIAL — core trend pipeline, carry scaffold, robustness/attribution suite, paper-trading mode, and vendor layer are built and tested; regime-diagnostics module, value/profitability sleeve, ML challenger interface, benchmark comparisons, and visualization/dashboard are not.
+**IMPLEMENTATION COMPLETE:** PARTIAL — core trend pipeline, carry scaffold, robustness/attribution suite, price-derived regime diagnostics, PBO, Monte Carlo, paper-trading mode, and vendor layer are built and tested; value/profitability sleeve, ML challenger interface, benchmark comparisons, valuation/macro regime data, and visualization/dashboard are not.
 **BACKTEST COMPLETE:** YES, on synthetic data only — not on real market data.
 **OUT-OF-SAMPLE TEST COMPLETE:** PARTIAL — chronological holdout mechanism built and run on synthetic data; not yet meaningful without real data.
 **WALK-FORWARD TEST COMPLETE:** PARTIAL — subperiod consistency reporting exists; true walk-forward retraining doesn't yet apply (no fitted component in the system).
-**STRESS TEST COMPLETE:** PARTIAL — cost/delay/rebalance/leave-one-out done; missing-data, noisy-data, crisis-period, gap, liquidity, and Monte Carlo stress tests are not.
+**STRESS TEST COMPLETE:** PARTIAL — cost/delay/rebalance/leave-one-out and Monte Carlo (block-bootstrap + trade-order permutation) done; missing-data, noisy-data, crisis-period, gap, and liquidity stress tests are not.
 **DATA-LEAKAGE AUDIT COMPLETE:** YES — structural point-in-time enforcement plus dedicated regression and direction-sanity tests.
 **PAPER-TRADING READY:** PARTIAL — mechanism built, tested, and reuses the exact backtest strategy code; not meaningful as an execution-quality measurement without a live data feed.
 **LIVE TRADING ENABLED:** NO — hard-blocked at the configuration layer; no live execution path exists.
@@ -247,13 +254,13 @@ A leakage-safe, config-driven, vendor-agnostic research system implementing Rese
 The architecture holds together end-to-end (data → features → strategy → sizing → costs → backtest → metrics → attribution) on synthetic data, with no look-ahead bugs found across dedicated leakage and direction-sanity tests. The carry activation gate correctly rejected a valueless-but-uncorrelated placeholder signal rather than being fooled by low correlation alone.
 
 ### What failed
-The frozen baseline is net-negative on the synthetic dataset used for pipeline testing — reported as-is per instruction, not tuned away, and explicitly not generalizable to real markets since the underlying data is fabricated.
+A real reproducibility bug (§N item 4): every synthetic data generator seeded its RNG from Python's randomized-per-process built-in `hash()`, so "the same config" silently produced different fabricated data on different runs — which had already produced a specific, plausible-sounding, but ultimately non-reproducible "finding" (the baseline losing money) that this report initially wrote up before the bug was caught and fixed. The corrected baseline is modestly positive; that number is likewise not to be over-read (§I) — the point of flagging this is the process failure, not either sign of the synthetic result.
 
 ### What remains uncertain
-Everything about real-world performance: no real market data, no live-verified vendor connection, no point-in-time fundamentals, and no regime-diagnostic instrumentation exist yet. The research's own central limitation — no independent replication has been performed — remains true.
+Everything about real-world performance: no real market data, no live-verified vendor connection, and no point-in-time fundamentals exist yet (price-derived regime diagnostics now do, but the valuation/macro data needed to test the research's own boundary finding still doesn't). The research's own central limitation — no independent replication has been performed — remains true.
 
 ### What should be tested next
-Real-data replication via the now-built vendor adapters (starting with a live smoke test), the regime-diagnostics module, the missing metrics/benchmarks, and only then a fresh look at whether the whipsaw pattern found on synthetic data has any real-market analogue — each as its own logged, falsifiable experiment, not as a retuning of the frozen baseline.
+Real-data replication via the now-built vendor adapters (starting with a live smoke test), the missing metrics/benchmarks, and only then a fresh look — using the now-built regime diagnostics — at what actually drives real-market performance, since the synthetic result's sign has already been shown (§I/§N) not to be a stable thing to extrapolate from — each as its own logged, falsifiable experiment, not as a retuning of the frozen baseline.
 
 ---
 
@@ -265,14 +272,16 @@ A second, India-specific research document (`India NSE + MCX Quantitative Tradin
 
 **A real bug was found and fixed during integration**: `CrossSectionalMomentumStrategy` initially scored every instrument in the shared NSE+MCX universe, not just NSE equities, because it had only ever been tested standalone. Caught by a manual smoke test before any formal test existed for it; a regression test now guards it (`tests/unit/test_cross_sectional_momentum.py::test_ignores_non_equity_instruments_in_a_shared_universe`).
 
-**A result requiring a loud caveat**: on synthetic data, `MCX_CARRY_01` shows a strong standalone Sharpe (+0.92) and passes its own activation gate, while both trend sleeves are flat-to-negative. This is very likely a **synthetic-data construction artifact** — the carry signal reads today's curve slope with zero lag, while trend signals are backward-looking averages that lag a regime change, so carry "sees" the fabricated persistent regime faster than trend does by construction, not because real carry outperforms real trend. `IndiaSystemConfig` hard-blocks `mcx_carry_01` from ever getting a nonzero blended risk share regardless of this result — a synthetic pass changes nothing about the real gate, by design.
+**A result requiring a loud caveat**: on synthetic data, `MCX_CARRY_01` shows a strong standalone Sharpe (+1.14) and passes its own activation gate, while both trend sleeves are flat-to-negative. This is very likely a **synthetic-data construction artifact** — the carry signal reads today's curve slope with zero lag, while trend signals are backward-looking averages that lag a regime change, so carry "sees" the fabricated persistent regime faster than trend does by construction, not because real carry outperforms real trend. `IndiaSystemConfig` hard-blocks `mcx_carry_01` from ever getting a nonzero blended risk share regardless of this result — a synthetic pass changes nothing about the real gate, by design.
 
-**Explicitly not implemented / flagged gaps**: real NSE/MCX data (synthetic only, same limitation as the global system), the EQ_MOM_01 rank-buffer hysteresis challenger, PBO (Probability of Backtest Overfitting) diagnostic, block-bootstrap/trade-order-permutation Monte Carlo, versioned exchange-calendar data beyond a single transcribed snapshot, most real instrument-master fields, the NSE quality challenger, options features, ML challengers, circuit-breaker/halt simulation, intraday execution, and an MCX commodities-transaction-tax (CTT) rate (not given anywhere in the source document — defaults to 0.0, which understates true MCX cost until a real figure is found).
+**A second, more serious bug was found and fixed after this addendum's numbers were first drafted**: every synthetic data generator derived per-symbol RNG seeds from Python's built-in `hash()`, which is randomized per process — so "the same config" silently produced different fabricated data across separate runs, violating Prompt.md §28's reproducibility requirement. Fixed with a stable SHA256-based hash and verified with a cross-process regression test (`tests/integration/test_cross_process_reproducibility.py`); the specific numbers throughout this addendum and `Docs/India_Implementation_Spec.md` reflect the corrected, now-reproducible run. The qualitative pattern (blended negative, MCX trend negative, carry strongly positive) held before and after the fix — only exact figures changed.
+
+**Explicitly not implemented / flagged gaps**: real NSE/MCX data (synthetic only, same limitation as the global system), the EQ_MOM_01 rank-buffer hysteresis challenger, versioned exchange-calendar data beyond a single transcribed snapshot, most real instrument-master fields, the NSE quality challenger, options features, ML challengers, circuit-breaker/halt simulation, intraday execution, and an MCX commodities-transaction-tax (CTT) rate (not given anywhere in the source document — defaults to 0.0, which understates true MCX cost until a real figure is found). PBO and Monte Carlo (`backtest/pbo.py`, `backtest/monte_carlo.py`) now exist generically, built for the global-futures suite — they have not yet been applied to this India system's own trials.
 
 ### India System Status
 
 **RESEARCH INTERPRETED:** YES
-**IMPLEMENTATION COMPLETE:** PARTIAL — the two priority-one sleeves, the blend, and the standalone carry challenger are built and tested; hysteresis buffer, PBO, Monte Carlo, quality/ML/options challengers, and real exchange-calendar data are not.
+**IMPLEMENTATION COMPLETE:** PARTIAL — the two priority-one sleeves, the blend, and the standalone carry challenger are built and tested; hysteresis buffer, quality/ML/options challengers, and real exchange-calendar data are not. PBO/Monte Carlo exist generically but haven't been applied to this system's own trials yet.
 **BACKTEST COMPLETE:** YES, synthetic data only.
 **OUT-OF-SAMPLE TEST COMPLETE:** PARTIAL — the exact discovery/validation/holdout split from the research is implemented and run; not meaningful without real data.
 **WALK-FORWARD TEST COMPLETE:** NOT DONE for this system yet (same caveat as the global system: no fitted parameters exist to walk forward on).

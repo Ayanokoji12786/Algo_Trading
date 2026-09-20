@@ -1,43 +1,43 @@
 {
   "carry_only_base_cost": {
-    "total_return": -0.32917882549215927,
-    "cagr": -0.016507259586133416,
-    "annualized_vol": 0.06176593746530389,
-    "sharpe": -0.2293646111423207,
-    "sortino": -0.38127892200191815,
-    "max_drawdown": -0.3578738278287781,
-    "max_drawdown_duration_days": 6158,
-    "calmar": -0.046125920093914176,
-    "avg_turnover_per_rebalance": 1.971548338935711,
-    "total_turnover": 2468.37852034751
+    "total_return": -0.010721773882390706,
+    "cagr": -0.00044930812890819904,
+    "annualized_vol": 0.06137593071663673,
+    "sharpe": 0.023613020345565876,
+    "sortino": 0.038642121160119676,
+    "max_drawdown": -0.31455778343643925,
+    "max_drawdown_duration_days": 3274,
+    "calmar": -0.0014283802613295944,
+    "avg_turnover_per_rebalance": 1.9974195466454998,
+    "total_turnover": 2500.769272400166
   },
   "carry_only_2x_cost": {
-    "total_return": -0.5239871727678977,
-    "cagr": -0.030473290666302888,
-    "annualized_vol": 0.061820227543248195,
-    "sharpe": -0.4525120954070967,
-    "sortino": -0.748907605466912,
-    "max_drawdown": -0.5373330632908375,
-    "max_drawdown_duration_days": 6158,
-    "calmar": -0.05671210790505344
+    "total_return": -0.3012904419177196,
+    "cagr": -0.014835714472993256,
+    "annualized_vol": 0.061471853110177124,
+    "sharpe": -0.20407804267830457,
+    "sortino": -0.3327221915062678,
+    "max_drawdown": -0.4033006645545162,
+    "max_drawdown_duration_days": 5193,
+    "calmar": -0.03678574268996236
   },
   "trend_plus_carry_combined": {
-    "total_return": -0.302373071141366,
-    "cagr": -0.014899401489975594,
-    "annualized_vol": 0.059307975009146675,
-    "sharpe": -0.21478292957624862,
-    "sortino": -0.3576021507540462,
-    "max_drawdown": -0.35092767408785086,
-    "max_drawdown_duration_days": 6158,
-    "calmar": -0.04245718588225588,
-    "avg_turnover_per_rebalance": 1.4876631380757936,
-    "total_turnover": 1862.5542488708936
+    "total_return": 0.2888274631307941,
+    "cagr": 0.010634383591632934,
+    "annualized_vol": 0.05781894853790515,
+    "sharpe": 0.20558964345719657,
+    "sortino": 0.34093223392347033,
+    "max_drawdown": -0.20385408064567334,
+    "max_drawdown_duration_days": 1934,
+    "calmar": 0.05216664566120198,
+    "avg_turnover_per_rebalance": 1.4779553700702788,
+    "total_turnover": 1850.4001233279891
   },
   "activation_gate": {
     "positive_net_value_after_base_costs": false,
     "survives_2x_cost_stress": false,
     "low_correlation_with_trend": true,
-    "measured_correlation_with_trend": 0.019481333764292105,
+    "measured_correlation_with_trend": 0.01441496342181819,
     "passes_implemented_subset_of_gate": false,
     "note": "This does not evaluate parameter stability or cross-fold/regime portfolio improvement -- see this module's docstring. A True result here is necessary, not sufficient, for enabling carry."
   }

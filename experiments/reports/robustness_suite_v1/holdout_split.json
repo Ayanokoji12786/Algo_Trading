@@ -1,27 +1,27 @@
 {
   "in_sample": {
-    "total_return": -0.1758187358129747,
-    "cagr": -0.01002594481378305,
-    "annualized_vol": 0.05929107191157341,
-    "sharpe": -0.1344963341343786,
-    "sortino": -0.2181044964081507,
-    "max_drawdown": -0.2818366312946786,
-    "max_drawdown_duration_days": 2312,
-    "calmar": -0.03557360435272968,
-    "avg_turnover_per_rebalance": 0.41609899823825647,
-    "total_turnover": 416.51509723649474
+    "total_return": 0.27720215515352864,
+    "cagr": 0.012831866267416281,
+    "annualized_vol": 0.05650134232838708,
+    "sharpe": 0.24619466765411163,
+    "sortino": 0.40276420849534067,
+    "max_drawdown": -0.1484239272517096,
+    "max_drawdown_duration_days": 1605,
+    "calmar": 0.08645416210861297,
+    "avg_turnover_per_rebalance": 0.3906225670181336,
+    "total_turnover": 391.01318958515174
   },
   "holdout": {
-    "total_return": -0.05570417815169859,
-    "cagr": -0.011884606056606684,
-    "annualized_vol": 0.06043196833982646,
-    "sharpe": -0.16085254995558074,
-    "sortino": -0.26802096427441174,
-    "max_drawdown": -0.19875076910987988,
-    "max_drawdown_duration_days": 1015,
-    "calmar": -0.0597965286365068,
-    "avg_turnover_per_rebalance": 0.4512713950055008,
-    "total_turnover": 113.2691201463807
+    "total_return": 0.04759778690688221,
+    "cagr": 0.00974680715569054,
+    "annualized_vol": 0.06050629134193105,
+    "sharpe": 0.18504892619569588,
+    "sortino": 0.29229781938684035,
+    "max_drawdown": -0.1324351232891432,
+    "max_drawdown_duration_days": 464,
+    "calmar": 0.07359684435382383,
+    "avg_turnover_per_rebalance": 0.40381594671953214,
+    "total_turnover": 101.35780262660256
   },
   "split_date": "2019-03-14 00:00:00"
 }
