@@ -553,15 +553,6 @@ For India, do not trust a backtest that omits STT, broker/exchange charges or co
 
 **Exact architecture profitability: low confidence until the specified replication is completed.** Published historical evidence is a prior, not a substitute for the user's Stage 5–11 validation gates. fileciteturn0file2
 
-### Research handoff to implementation AI
-
-> **Build this research system, not a production trading bot:**  
-> Create a leakage-safe, contract-level daily futures backtester covering diversified liquid equity-index, rates, FX and commodity futures. Implement a frozen 63/126/252-trading-day time-series-momentum ensemble using only lagged information. Size each position by lagged realised volatility; equalise risk hierarchically across instruments and asset classes; use a fixed portfolio-volatility target with independent concentration, margin and liquidity caps. Rebalance weekly and execute no earlier than the next tradable session. Model actual futures rolls and charge commissions, exchange fees, spread, slippage, impact, financing and applicable taxes. Do not use RSI/MACD indicator stacking, hard regime switching, ML, neural networks or reinforcement learning in the baseline.  
->
-> Build a separate cross-asset carry module but leave it disabled. Activate it only if a frozen walk-forward test shows positive post-cost economic value and genuine return/drawdown diversification versus trend under both normal and stressed cost assumptions. Build value/profitability as a separate equity challenger only when survivorship-safe point-in-time fundamentals are available.  
->
-> Validate chronologically with an untouched holdout, walk-forward folds, neighbouring parameters, alternative roll rules, execution delays, base/2×/3× costs, leave-one-asset and leave-one-asset-class-out tests, subperiod/regime analysis and multiple-testing-aware statistics. Log every experiment and failed hypothesis. Promote nothing to paper trading unless it survives these tests without retuning. This specification is a research hypothesis, not a guarantee of future profitability. The literature supporting the first build is strongest for diversified time-series momentum, while current evidence also documents important momentum boundaries and therefore demands the adversarial tests above. citeturn0search5turn14view3turn14view5turn16search3
-
 ### Concise references
 
 Moskowitz, Ooi & Pedersen, *Time Series Momentum*, *Journal of Financial Economics* — foundational multi-asset futures evidence. citeturn0search5
