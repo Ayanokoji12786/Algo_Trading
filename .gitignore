@@ -6,3 +6,7 @@ __pycache__/
 experiments/log.jsonl
 .DS_Store
 .claude/
+# Source research PDFs stay local, not in git -- matches the user's own
+# choice to remove Prompt.md/Research.md from the repo earlier; their
+# content is preserved as structured extractions in Docs/*_Implementation_Spec.md.
+*.pdf

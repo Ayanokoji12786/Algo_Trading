@@ -22,6 +22,7 @@ from datetime import date
 from dataclasses import dataclass, field
 
 from trading_system.data.interfaces import ContractMeta
+from trading_system.util import stable_hash
 
 _TRADING_DAYS_PER_YEAR = 252
 
@@ -101,7 +102,7 @@ class SyntheticNSEEquityDataSource:
     ) -> pd.DataFrame:
         n = len(dates)
         rng = np.random.default_rng(
-            self._config.random_seed + hash(meta.symbol) % (2**16) + 1
+            self._config.random_seed + stable_hash(meta.symbol) % (2**16) + 1
         )
         idio_daily_vol = self._config.idio_annual_vol / np.sqrt(_TRADING_DAYS_PER_YEAR)
 

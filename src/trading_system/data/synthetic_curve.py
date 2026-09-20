@@ -25,6 +25,7 @@ import numpy as np
 import pandas as pd
 
 from trading_system.data.interfaces import ContractMeta
+from trading_system.util import stable_hash
 
 _TRADING_DAYS_PER_YEAR = 252
 _DEFAULT_COMMODITIES = (
@@ -68,7 +69,7 @@ class SyntheticMCXCurveDataSource:
         full_calendar = pd.bdate_range(config.start_date, config.end_date)
 
         for commodity in config.commodities:
-            rng = np.random.default_rng(config.random_seed + hash(commodity) % (2**16))
+            rng = np.random.default_rng(config.random_seed + stable_hash(commodity) % (2**16))
             index_price = self._generate_index(commodity, full_calendar, rng)
             basis_slope = self._generate_basis_slope(full_calendar, rng)
 

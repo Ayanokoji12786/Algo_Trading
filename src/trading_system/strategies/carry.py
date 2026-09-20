@@ -23,6 +23,7 @@ import pandas as pd
 from trading_system.config.schema import TrendStrategyConfig
 from trading_system.data.pit_store import PointInTimeStore
 from trading_system.features.volatility import ewma_annualized_vol
+from trading_system.util import stable_hash
 from trading_system.strategies.base import Signal
 
 
@@ -48,7 +49,7 @@ class SyntheticCarrySignalSource:
 
     def __init__(self, symbols: list[str], seed: int = 999):
         self._rng_by_symbol = {
-            sym: np.random.default_rng(seed + hash(sym) % (2**16)) for sym in symbols
+            sym: np.random.default_rng(seed + stable_hash(sym) % (2**16)) for sym in symbols
         }
         self._cache: dict[tuple[str, pd.Timestamp], float] = {}
 

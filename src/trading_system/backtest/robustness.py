@@ -30,6 +30,28 @@ def _run_once(config: SystemConfig, store: PointInTimeStore) -> dict[str, float]
     return compute_metrics(result.equity_curve, result.turnover)
 
 
+def lookback_neighborhood_returns(
+    base_config: SystemConfig,
+    store: PointInTimeStore,
+    neighborhoods: list[tuple[int, ...]],
+) -> pd.DataFrame:
+    """Same sweep as lookback_neighborhood_sweep, but returns each trial's
+    daily-return SERIES (columns = str(lookback_days)) rather than summary
+    metrics -- the input shape backtest/pbo.py's CSCV procedure and
+    backtest/monte_carlo.py's resampling need, which a metrics-only sweep
+    can't provide.
+    """
+    series = {}
+    for lb in neighborhoods:
+        cfg = dataclasses.replace(
+            base_config, trend=dataclasses.replace(base_config.trend, lookback_days=lb)
+        )
+        strategy = TrendStrategy(cfg.trend)
+        result = BacktestEngine(cfg, store, strategy).run()
+        series[str(lb)] = result.equity_curve.pct_change().dropna()
+    return pd.DataFrame(series)
+
+
 def _log(
     tracker: ExperimentTracker | None,
     experiment_id: str,

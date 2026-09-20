@@ -19,6 +19,7 @@ import pandas as pd
 
 from trading_system.config.schema import DataConfig
 from trading_system.data.interfaces import ContractMeta
+from trading_system.util import stable_hash
 
 _ANNUAL_VOL_BY_ASSET_CLASS = {
     "equity_index": 0.16,
@@ -58,7 +59,7 @@ class SyntheticFuturesDataSource:
 
     def _generate_series(self, meta: ContractMeta) -> pd.DataFrame:
         rng = np.random.default_rng(
-            self._config.random_seed + hash(meta.symbol) % (2**16)
+            self._config.random_seed + stable_hash(meta.symbol) % (2**16)
         )
         dates = pd.bdate_range(self._config.start_date, self._config.end_date)
         n = len(dates)

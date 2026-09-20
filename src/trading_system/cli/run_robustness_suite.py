@@ -20,6 +20,12 @@ from trading_system.backtest.attribution import subperiod_breakdown, train_test_
 from trading_system.backtest.dsr import deflated_sharpe_ratio
 from trading_system.backtest.engine import BacktestEngine
 from trading_system.backtest.metrics import compute_metrics
+from trading_system.backtest.monte_carlo import (
+    block_bootstrap_returns,
+    summarize_simulations,
+    trade_order_permutation,
+)
+from trading_system.backtest.pbo import probability_of_backtest_overfitting
 from trading_system.config.defaults import default_config
 from trading_system.data.pit_store import PointInTimeStore
 from trading_system.data.synthetic import SyntheticFuturesDataSource
@@ -153,13 +159,44 @@ def main() -> None:
     print(json.dumps(dsr, indent=2))
     (REPORT_DIR / "deflated_sharpe_ratio.json").write_text(json.dumps(dsr, indent=2))
 
+    _print_header("Probability of Backtest Overfitting (CSCV over the lookback-neighborhood trials)")
+    trial_returns = robustness.lookback_neighborhood_returns(
+        config,
+        store,
+        neighborhoods=[(42, 84, 168), (52, 105, 210), (63, 126, 252), (75, 150, 300), (84, 168, 336)],
+    )
+    pbo_result = probability_of_backtest_overfitting(trial_returns, n_splits=10)
+    print(json.dumps(pbo_result, indent=2))
+    (REPORT_DIR / "pbo.json").write_text(json.dumps(pbo_result, indent=2))
+
+    _print_header("Monte Carlo: block-bootstrap returns and trade-order permutation (baseline)")
+    baseline_daily_returns = baseline_result.equity_curve.pct_change().dropna()
+    block_sims = block_bootstrap_returns(
+        baseline_daily_returns, n_simulations=500, block_size=21, seed=7
+    )
+    block_summary = summarize_simulations(block_sims, rolling_window=252)
+    print("block-bootstrap:", json.dumps(block_summary, indent=2))
+
+    # Trade-order permutation needs per-trade P&L, which this cost-only trade
+    # log doesn't carry directly -- approximate with realized daily P&L on
+    # days a trade occurred as a stand-in "trade outcome" sequence. This is a
+    # documented simplification, not a precise per-trade P&L reconstruction.
+    trade_dates = baseline_result.trade_log["date"].unique()
+    trade_day_returns = baseline_daily_returns.reindex(pd.to_datetime(trade_dates)).dropna()
+    permuted_sims = trade_order_permutation(trade_day_returns, n_simulations=500, seed=11)
+    permuted_summary = summarize_simulations(permuted_sims, rolling_window=min(60, len(trade_day_returns)))
+    print("trade-order permutation:", json.dumps(permuted_summary, indent=2))
+
+    monte_carlo_results = {"block_bootstrap": block_summary, "trade_order_permutation": permuted_summary}
+    (REPORT_DIR / "monte_carlo.json").write_text(json.dumps(monte_carlo_results, indent=2))
+
     tracker.record(
         ExperimentRecord(
             experiment_id="robustness_suite_v1_summary",
             hypothesis="Summary record for the full robustness suite run against synthetic data.",
             config={"n_trials_in_dsr_correction": len(trial_sharpes)},
             data_description="Synthetic data throughout -- pipeline/robustness-mechanics check, not evidence.",
-            result={"baseline": baseline_metrics, "dsr": dsr},
+            result={"baseline": baseline_metrics, "dsr": dsr, "pbo": pbo_result},
             conclusion=(
                 "All sweeps executed without error. Numeric outcomes are not "
                 "interpretable as evidence about the real trend hypothesis "
