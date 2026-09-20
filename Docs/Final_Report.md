@@ -287,5 +287,35 @@ A second, India-specific research document (`India NSE + MCX Quantitative Tradin
 **WALK-FORWARD TEST COMPLETE:** NOT DONE for this system yet (same caveat as the global system: no fitted parameters exist to walk forward on).
 **STRESS TEST COMPLETE:** PARTIAL — 2×/3× cost stress via `IndiaCostConfig.scenario` exists; the research's full mandatory stress list (COVID-2020 subperiod, five worst weeks, roll-timing ±3 sessions, individual-commodity/sector removal, covariance shocks, missing-data scenarios) is not yet run for this system.
 **DATA-LEAKAGE AUDIT COMPLETE:** YES — dedicated cross-sectional leakage regression test plus the same structural PIT enforcement as the rest of the codebase.
-**PAPER-TRADING READY:** NO — the blended engine has no paper-trading wrapper yet (the existing `live/paper/PaperTrader` was built against the single/multi-strategy `BacktestEngine`, not the new per-sleeve `BlendedPortfolioEngine`).
+**PAPER-TRADING READY:** YES for both systems — `live/paper/PaperTrader` wraps the single-strategy `BacktestEngine`, and `live/paper/BlendedPaperTrader` (new) wraps the per-sleeve `BlendedPortfolioEngine`. Both call the same shared helpers as their engines (`backtest/blended_engine.py`'s module-level `select_decision_dates`, `resolve_contracts`, `median_traded_value` are now shared functions rather than duplicated methods) so backtest and paper cannot silently diverge, and `tests/integration/test_blended_paper_trader.py` includes a strict byte-level parity test that verifies the trader's final NAV and positions match the engine's for the same trading calendar. Same honest limitation as before: with no live market data feed, "paper trading" is a historical replay through the stepping loop, and the expected-vs-simulated-execution slippage is always 0 (both sides use the same historical close), which will only become a real measurement once a live/delayed quote feed is connected.
 **LIVE TRADING ENABLED:** NO.
+
+## Post-Milestone Audit (this pass)
+
+An extensive security-and-correctness audit was run over every module. Findings and fixes below; all 202 tests pass (up from 172), including new dedicated regression tests for each item.
+
+**Real bugs found and fixed:**
+
+1. **Path traversal via symbol name.** `LocalFileDataSource.get_prices`, `brokers/base.py:read_or_none`, and `brokers/base.py:write_cache` all concatenated a `symbol` string into a filesystem path with no validation. A universe listing containing e.g. `"../../etc/passwd"` could have read/written outside the intended directory. Fixed with `trading_system/util.py:validate_symbol_name` (allowlist-based) called from every path-building site. Regression test: `tests/unit/test_symbol_validation.py`, `tests/unit/test_path_traversal_defense.py`.
+
+2. **INDmoney adapter used a naive datetime for epoch-ms conversion**, which `.timestamp()` interprets as local time on the host machine. A US-Eastern user and an IST user would send different epoch-ms values for "the same date" and get different data back, violating reproducibility across environments. Fixed by attaching `Asia/Kolkata` tzinfo explicitly (matches the vendor's documented "All timestamps are in IST" convention). Regression test: `tests/unit/test_indmoney_timezone.py`.
+
+3. **`apply_participation_cap` didn't cap sell/exit trades.** Iterating only `target_weights.items()` meant a symbol present in `current_weights` but absent from `target_weights` (a full exit) bypassed the cap and disappeared from the returned dict — the caller sold the whole position in one bar regardless of liquidity. Fixed by iterating the union. Regression test: `tests/unit/test_participation_cap_exits.py`.
+
+4. **Non-atomic cache write.** `brokers/base.py:write_cache` wrote directly to the final path; an interrupted process could leave a truncated/corrupted parquet that the next read would explode on. Fixed with staging-file + `Path.replace()` (POSIX-atomic rename within one filesystem).
+
+5. **Silent asset-class fallback in the blended engine and paper trader.** `self._asset_class_by_symbol.get(sym, "nse_equity")` had let an earlier scope bug (a strategy returning weights for the wrong asset class) go undetected because unknown symbols were silently reclassified as NSE equity, then charged equity STT/stamp duty. Both engine and paper trader now raise `KeyError` on unknown symbols rather than fabricate an asset class.
+
+6. **`MCXTrendSleeve` empty-underlying collision.** Symbols with empty `underlying` labels would collide under the `""` key, producing a single mixed signal not traceable to any commodity. Now filters `if not meta.underlying: continue`, matching `MCXCarryStrategy`'s existing filter.
+
+7. **`RiskGuardrails.check_drawdown` was defined but never called.** The drawdown-from-peak limit was documented in the guardrails module but no caller invoked it, so it was silently unenforced. Both `PaperTrader` and `BlendedPaperTrader` now track `_peak_nav` and call `check_drawdown` after every step's PnL update. Regression test: `tests/integration/test_drawdown_enforcement.py`.
+
+8. **Cache read bypassed `normalize_ohlcv`.** A stale or wrong-shape cached file would be loaded without column-shape validation, breaking downstream code far from the actual defect. Cached reads now run through `normalize_ohlcv` too.
+
+9. **INDmoney error message dumped the entire vendor payload** including request metadata — a leak risk since this adapter sends the Authorization token on every request. Errors now log only `status` and `message` fields explicitly.
+
+10. **Silent config-validation gaps.** `CostConfig`, `IndiaCostConfig`, and `SystemConfig` accepted invalid `scenario`/`mode` typos silently at construction, only surfacing as a `KeyError` deep in a backtest. All three now validate in `__post_init__`. Regression test: `tests/unit/test_config_validation.py`.
+
+11. **`PointInTimeStore.history_as_of` returned a possibly-view DataFrame.** The leakage-safety guarantee relied on pandas' `SettingWithCopyWarning` protecting internal state; that protection is being deprecated in pandas 3.0's copy-on-write model. Now returns an explicit `.copy()` so the guarantee holds identically across pandas versions.
+
+**Also swept for and confirmed absent:** `eval`/`exec`/`pickle.load`/`__import__`/`compile`; `subprocess`/`os.system`/`shell=True`; hardcoded credentials or API keys; bare `except:`/`except Exception:` catchers; unseeded random generators (all use `np.random.default_rng(explicit_seed)`); TODOs/FIXMEs/XXX/HACK markers. The credential policy is intact: no adapter accepts or stores API keys, passwords, or TOTP secrets — each takes an already-authenticated client object built by the caller in their own script.

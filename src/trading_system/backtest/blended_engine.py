@@ -23,7 +23,7 @@ separate roll-cost code path exists or is needed).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Protocol
 
 import pandas as pd
@@ -54,6 +54,63 @@ class SleeveSpec:
     participation_cap_fraction: float | None = None  # None disables the cap
 
 
+# ---- Shared helpers (module-level so BlendedPaperTrader can call the SAME
+# functions BlendedPortfolioEngine calls -- prevents silent drift between the
+# backtest and paper-trading code paths, which was the whole point of the
+# existing single-strategy PaperTrader's parity test in
+# tests/integration/test_paper_trader.py). ----
+
+
+def select_decision_dates(calendar: pd.DatetimeIndex, frequency: str) -> list[pd.Timestamp]:
+    """Decision dates for a given rebalance frequency, per this system's
+    "signal as of prior close, decide today" convention -- the first
+    calendar day is always excluded because it has no prior session to form
+    a signal from.
+    """
+    if frequency == "daily":
+        return list(calendar[1:])
+    if frequency == "weekly":
+        iso = pd.Series(calendar, index=calendar).index.isocalendar()
+        grouped = pd.DataFrame({"date": calendar, "year": iso["year"], "week": iso["week"]})
+        weekly = grouped.groupby(["year", "week"])["date"].max().sort_values()
+        return [d for d in weekly.tolist() if d != calendar[0]]
+    if frequency == "monthly":
+        grouped = pd.DataFrame({"date": calendar, "period": calendar.to_period("M")})
+        monthly = grouped.groupby("period")["date"].max().sort_values()
+        return [d for d in monthly.tolist() if d != calendar[0]]
+    raise ValueError(f"Unknown rebalance_frequency: {frequency!r}")
+
+
+def resolve_contracts(
+    weights_by_underlying: dict[str, float],
+    as_of: pd.Timestamp,
+    universe: list,
+) -> dict[str, float]:
+    """Map a dict keyed by underlying (e.g. "GOLD") to a dict keyed by the
+    currently active dated contract symbol (e.g. "GOLD_202601"), summing
+    weights if the same active contract represents multiple underlyings.
+    """
+    resolved: dict[str, float] = {}
+    for underlying, w in weights_by_underlying.items():
+        symbol = active_contract_for(underlying, as_of.date(), universe)
+        if symbol is None:
+            continue
+        resolved[symbol] = resolved.get(symbol, 0.0) + w
+    return resolved
+
+
+def median_traded_value(store: PointInTimeStore, symbol: str, as_of: pd.Timestamp, window: int = 60) -> float:
+    """Median (close * volume) over the trailing ``window`` sessions --
+    fabricated when using synthetic data, real when using a real vendor.
+    """
+    history = store.history_as_of(symbol, as_of)
+    if len(history) < 2:
+        return 0.0
+    recent = history.iloc[-window:]
+    traded_value = recent["close"] * recent["volume"]
+    return float(traded_value.median())
+
+
 @dataclass
 class BlendedBacktestResult:
     equity_curve: pd.Series
@@ -82,40 +139,19 @@ class BlendedPortfolioEngine:
         self._asset_class_by_symbol = {m.symbol: m.asset_class for m in store.universe}
         self._risk_shares = {s.sleeve.sleeve_id: s.risk_share for s in sleeve_specs}
 
-    def _select_decision_dates(
-        self, calendar: pd.DatetimeIndex, frequency: str
-    ) -> list[pd.Timestamp]:
-        if frequency == "daily":
-            return list(calendar[1:])
-        if frequency == "weekly":
-            iso = pd.Series(calendar, index=calendar).index.isocalendar()
-            grouped = pd.DataFrame({"date": calendar, "year": iso["year"], "week": iso["week"]})
-            weekly = grouped.groupby(["year", "week"])["date"].max().sort_values()
-            return [d for d in weekly.tolist() if d != calendar[0]]
-        if frequency == "monthly":
-            grouped = pd.DataFrame({"date": calendar, "period": calendar.to_period("M")})
-            monthly = grouped.groupby("period")["date"].max().sort_values()
-            return [d for d in monthly.tolist() if d != calendar[0]]
-        raise ValueError(f"Unknown rebalance_frequency: {frequency!r}")
+    # Backwards-compatible thin wrappers over the module-level helpers,
+    # kept because these were public-ish (single-underscore) methods on the
+    # engine already, and downstream code (or an integration test) might
+    # rely on them. The shared functions above are the single source of
+    # truth; these must not add any extra logic.
+    def _select_decision_dates(self, calendar: pd.DatetimeIndex, frequency: str) -> list[pd.Timestamp]:
+        return select_decision_dates(calendar, frequency)
 
-    def _resolve_contracts(
-        self, weights_by_underlying: dict[str, float], as_of: pd.Timestamp
-    ) -> dict[str, float]:
-        resolved: dict[str, float] = {}
-        for underlying, w in weights_by_underlying.items():
-            symbol = active_contract_for(underlying, as_of.date(), self._store.universe)
-            if symbol is None:
-                continue
-            resolved[symbol] = resolved.get(symbol, 0.0) + w
-        return resolved
+    def _resolve_contracts(self, weights_by_underlying: dict[str, float], as_of: pd.Timestamp) -> dict[str, float]:
+        return resolve_contracts(weights_by_underlying, as_of, self._store.universe)
 
     def _median_traded_value(self, symbol: str, as_of: pd.Timestamp, window: int = 60) -> float:
-        history = self._store.history_as_of(symbol, as_of)
-        if len(history) < 2:
-            return 0.0
-        recent = history.iloc[-window:]
-        traded_value = recent["close"] * recent["volume"]
-        return float(traded_value.median())
+        return median_traded_value(self._store, symbol, as_of, window)
 
     def run(self) -> BlendedBacktestResult:
         calendar = self._store.trading_calendar()
@@ -218,7 +254,19 @@ class BlendedPortfolioEngine:
                     if delta_w == 0:
                         continue
                     notional_traded = delta_w * nav
-                    asset_class = self._asset_class_by_symbol.get(sym, "nse_equity")
+                    if sym not in self._asset_class_by_symbol:
+                        # Defense in depth: an earlier scope bug (a strategy
+                        # returning weights for symbols outside its eligible
+                        # asset class) went undetected because a silent
+                        # `.get(sym, "nse_equity")` default here misclassified
+                        # untradable symbols as nse_equity. Failing loudly
+                        # forces future bugs of the same shape into the open.
+                        raise KeyError(
+                            f"Symbol {sym!r} produced a trade but is not in "
+                            "the store's universe -- refuse to fabricate an "
+                            "asset_class for cost calculation."
+                        )
+                    asset_class = self._asset_class_by_symbol[sym]
                     cost = india_trade_cost(
                         notional_traded, asset_class, is_buy=delta_w > 0, config=self._cost_config
                     )

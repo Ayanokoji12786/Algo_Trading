@@ -26,6 +26,7 @@ import pandas as pd
 
 from trading_system.brokers.base import normalize_ohlcv
 from trading_system.data.interfaces import ContractMeta
+from trading_system.util import validate_symbol_name
 
 
 class LocalFileDataSource:
@@ -43,6 +44,7 @@ class LocalFileDataSource:
         return list(self._universe)
 
     def get_prices(self, symbol: str) -> pd.DataFrame:
+        validate_symbol_name(symbol)
         csv_path = self._directory / f"{symbol}.csv"
         parquet_path = self._directory / f"{symbol}.parquet"
         if parquet_path.exists():

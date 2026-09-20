@@ -41,9 +41,16 @@ class PointInTimeStore:
         """All bars for ``symbol`` with timestamp <= ``as_of``.
 
         This is the *only* way strategy/feature code should touch prices.
+        Returns a defensive copy: pandas' ``.loc[bool_mask]`` semantics have
+        historically varied between view and copy across versions, and the
+        SettingWithCopyWarning that currently protects the store's internal
+        state is being deprecated in pandas 3.0's copy-on-write model.
+        An explicit ``.copy()`` makes the leakage-safety guarantee hold
+        identically across pandas versions, at a small per-call cost that
+        is fine for a research pipeline.
         """
         full = self.__full_history[symbol]
-        return full.loc[full.index <= as_of]
+        return full.loc[full.index <= as_of].copy()
 
     def close_as_of(self, symbol: str, as_of: pd.Timestamp) -> float | None:
         hist = self.history_as_of(symbol, as_of)

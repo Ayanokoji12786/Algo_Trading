@@ -71,6 +71,12 @@ class PaperTrader:
         self._current_weights: dict[str, float] = {}
         self._nav = config.backtest.initial_capital
         self._nav_start_of_day = self._nav
+        # Peak NAV so far -- needed for the drawdown guardrail, which the
+        # RiskGuardrails module has always defined but nothing previously
+        # called (real audit finding: the drawdown limit was documented but
+        # unenforced, meaning a portfolio could exceed max_drawdown_pct
+        # silently). Now checked after every step's PnL update.
+        self._peak_nav = self._nav
         self._asset_class_by_symbol = {m.symbol: m.asset_class for m in store.universe}
         self._order_counter = 0
         self.records: list[PaperTradeRecord] = []
@@ -115,6 +121,11 @@ class PaperTrader:
 
         self._guardrails.check_daily_loss(self._nav_start_of_day, self._nav)
         self._nav_start_of_day = self._nav
+        # Track peak and enforce drawdown limit (see __init__ comment).
+        if self._nav > self._peak_nav:
+            self._peak_nav = self._nav
+        current_drawdown = (self._nav - self._peak_nav) / self._peak_nav if self._peak_nav > 0 else 0.0
+        self._guardrails.check_drawdown(current_drawdown)
 
         record = PaperTradeRecord(
             signal_timestamp=signal_as_of,

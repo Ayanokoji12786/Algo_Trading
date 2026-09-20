@@ -46,6 +46,10 @@ class RiskConfig:
     max_gross_leverage: float = 4.0
 
 
+_VALID_COST_SCENARIOS = ("base", "stress_2x", "stress_3x")
+_VALID_MODES = ("research", "backtest", "paper", "live")
+
+
 @dataclass(frozen=True)
 class CostConfig:
     """Transaction cost model (Research.md "Cost and execution model").
@@ -64,6 +68,17 @@ class CostConfig:
         }
     )
     scenario: CostScenario = "base"
+
+    def __post_init__(self) -> None:
+        # Fail loud at construction rather than deep inside a backtest
+        # loop -- previously an unknown scenario (typo) would silently
+        # pass construction, then KeyError from scenario_multiplier() much
+        # later, with far less diagnostic value.
+        if self.scenario not in _VALID_COST_SCENARIOS:
+            raise ValueError(
+                f"CostConfig.scenario={self.scenario!r} is not one of "
+                f"{_VALID_COST_SCENARIOS!r}."
+            )
 
     def scenario_multiplier(self) -> float:
         return {"base": 1.0, "stress_2x": 2.0, "stress_3x": 3.0}[self.scenario]
@@ -115,6 +130,14 @@ class SystemConfig:
     carry_enabled: bool = False
 
     def __post_init__(self) -> None:
+        # Validate mode against the full known set (defense in depth: the
+        # Literal type protects at type-check time but doesn't fire at
+        # runtime, so a typo like "papper" would previously silently pass
+        # construction and only surface as a KeyError somewhere weird).
+        if self.mode not in _VALID_MODES:
+            raise ValueError(
+                f"SystemConfig.mode={self.mode!r} is not one of {_VALID_MODES!r}."
+            )
         if self.mode == "live":
             raise ValueError(
                 "Live trading must never be enabled via default config "

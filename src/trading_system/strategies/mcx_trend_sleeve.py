@@ -60,6 +60,13 @@ class MCXTrendSleeve:
         for meta in store.universe:
             if meta.asset_class != "mcx_commodity_index":
                 continue
+            # Skip index metas without an ``underlying`` label: the weights
+            # dict is keyed by underlying, and multiple index symbols with
+            # empty underlying would silently collide under one "" key,
+            # producing a single mixed signal that isn't traceable to any
+            # commodity. Same filter as MCXCarryStrategy uses.
+            if not meta.underlying:
+                continue
             history = store.history_as_of(meta.symbol, as_of)
             if history.empty:
                 continue

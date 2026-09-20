@@ -39,6 +39,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from trading_system.util import validate_symbol_name
+
 
 @dataclass(frozen=True)
 class InstrumentMapping:
@@ -106,12 +108,19 @@ def read_or_none(cache_dir: Path, symbol: str, start: date, end: date) -> pd.Dat
     logic -- acceptable for a research system where get_prices() is called
     once per symbol per PointInTimeStore construction, not per tick.
     """
+    validate_symbol_name(symbol)
     path = cache_dir / f"{symbol}.parquet"
     if not path.exists():
         return None
     cached = pd.read_parquet(path)
     if cached.empty:
         return None
+    # Cached frames must still pass the vendor-agnostic shape check on
+    # every read -- if the cache format ever changes or a stale/partial
+    # file exists, silently returning a wrong-shape frame would break
+    # downstream code far from the actual defect. normalize_ohlcv raises
+    # if required columns are missing.
+    cached = normalize_ohlcv(cached)
     if cached.index.min().date() <= start and cached.index.max().date() >= end:
         mask = (cached.index.date >= start) & (cached.index.date <= end)
         return cached.loc[mask]
@@ -119,5 +128,13 @@ def read_or_none(cache_dir: Path, symbol: str, start: date, end: date) -> pd.Dat
 
 
 def write_cache(cache_dir: Path, symbol: str, df: pd.DataFrame) -> None:
+    validate_symbol_name(symbol)
     cache_dir.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(cache_dir / f"{symbol}.parquet")
+    # Atomic write: staging file + rename so an interrupted process can't
+    # leave a truncated/corrupted parquet at the destination (which the
+    # next read would explode on). Rename on POSIX is atomic within a
+    # single filesystem; the temp file lives in the same dir so this holds.
+    final_path = cache_dir / f"{symbol}.parquet"
+    tmp_path = cache_dir / f"{symbol}.parquet.tmp"
+    df.to_parquet(tmp_path)
+    tmp_path.replace(final_path)

@@ -31,6 +31,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from pathlib import Path
 from typing import Protocol
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -44,6 +45,7 @@ from trading_system.brokers.base import (
 from trading_system.data.interfaces import ContractMeta
 
 BASE_URL = "https://api.indstocks.com"
+_IST = ZoneInfo("Asia/Kolkata")
 
 
 class HttpClientLike(Protocol):
@@ -52,7 +54,20 @@ class HttpClientLike(Protocol):
 
 
 def _to_epoch_ms(d: date, end_of_day: bool = False) -> int:
-    dt = datetime(d.year, d.month, d.day, 23, 59, 59) if end_of_day else datetime(d.year, d.month, d.day)
+    """Epoch ms for the IST wall-time midnight (or 23:59:59) of ``d``.
+
+    Previously used a naive datetime and called ``.timestamp()`` -- which
+    interprets naive datetimes as LOCAL TIME on the host running the code.
+    That meant a user in US Eastern (UTC-5) would send different epoch ms
+    values than a user in IST for "the same date", getting wrong-window
+    data back from the vendor. Fixed by attaching IST tz explicitly, which
+    matches the vendor's documented convention: "All timestamps are in IST
+    and Unix epoch milliseconds."
+    """
+    if end_of_day:
+        dt = datetime(d.year, d.month, d.day, 23, 59, 59, tzinfo=_IST)
+    else:
+        dt = datetime(d.year, d.month, d.day, tzinfo=_IST)
     return int(dt.timestamp() * 1000)
 
 
@@ -107,7 +122,16 @@ class INDmoneyDataSource:
             )
             payload = response.json()
             if payload.get("status") != "success":
-                raise ValueError(f"INDstocks API error for {symbol}: {payload}")
+                # Deliberately do NOT dump the full ``payload`` here: some
+                # vendor error responses echo request headers or metadata
+                # back, and this adapter sends the Authorization token in
+                # every request. Log only the vendor's own status/message
+                # fields (typically safe strings), never the whole payload.
+                status = payload.get("status", "<no status>")
+                message = payload.get("message", "<no message>")
+                raise ValueError(
+                    f"INDstocks API error for {symbol}: status={status!r}, message={message!r}"
+                )
             rows.extend(payload["data"]["candles"])
 
         if not rows:

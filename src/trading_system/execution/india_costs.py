@@ -25,6 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
+_VALID_COST_SCENARIOS = ("base", "stress_2x", "stress_3x")
 CostScenario = str  # "base" | "stress_2x" | "stress_3x"
 
 
@@ -54,6 +55,15 @@ CURRENT_INDIA_COST_RATES = IndiaCostRates(effective_from=date(2026, 4, 1), effec
 class IndiaCostConfig:
     rates: IndiaCostRates = field(default_factory=lambda: CURRENT_INDIA_COST_RATES)
     scenario: CostScenario = "base"
+
+    def __post_init__(self) -> None:
+        # Fail loud at construction. See config/schema.py:CostConfig for
+        # why this matters (same validation gap).
+        if self.scenario not in _VALID_COST_SCENARIOS:
+            raise ValueError(
+                f"IndiaCostConfig.scenario={self.scenario!r} is not one of "
+                f"{_VALID_COST_SCENARIOS!r}."
+            )
 
     def scenario_multiplier(self) -> float:
         # Matches the research's framing of "2x/3x VARIABLE execution
