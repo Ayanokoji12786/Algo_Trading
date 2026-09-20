@@ -30,6 +30,7 @@ from trading_system.config.schema import SystemConfig
 from trading_system.data.pit_store import PointInTimeStore
 from trading_system.execution.costs import trade_cost
 from trading_system.execution.simulator import next_execution_date
+from trading_system.portfolio.aggregation import compute_multi_strategy_target_weights
 from trading_system.portfolio.sizing import compute_target_weights
 from trading_system.strategies.base import Strategy
 
@@ -43,10 +44,22 @@ class BacktestResult:
 
 
 class BacktestEngine:
-    def __init__(self, config: SystemConfig, store: PointInTimeStore, strategy: Strategy):
+    def __init__(
+        self,
+        config: SystemConfig,
+        store: PointInTimeStore,
+        strategy: Strategy | list[Strategy],
+    ):
+        """``strategy`` is normally a single Strategy (the production
+        baseline runs one active sleeve -- Research.md "Portfolio logic").
+        A list is accepted only to support the trend+carry complementarity
+        comparison (Research.md S20), in which case each strategy receives
+        an equal ex-ante risk budget (portfolio/aggregation.py) rather than
+        the single-strategy asset-class-only equalization.
+        """
         self._config = config
         self._store = store
-        self._strategy = strategy
+        self._strategies = strategy if isinstance(strategy, list) else [strategy]
         self._asset_class_by_symbol = {
             meta.symbol: meta.asset_class for meta in store.universe
         }
@@ -73,12 +86,23 @@ class BacktestEngine:
             if pos == 0:
                 continue
             signal_as_of = calendar[pos - 1]
-            signals = self._strategy.generate_signals(self._store, signal_as_of)
-            target_weights = compute_target_weights(
-                signals,
-                self._config.risk,
-                self._config.trend.vol_floor_annualized,
-            )
+            if len(self._strategies) == 1:
+                signals = self._strategies[0].generate_signals(self._store, signal_as_of)
+                target_weights = compute_target_weights(
+                    signals,
+                    self._config.risk,
+                    self._config.trend.vol_floor_annualized,
+                )
+            else:
+                signals_by_strategy = {
+                    strat.strategy_id: strat.generate_signals(self._store, signal_as_of)
+                    for strat in self._strategies
+                }
+                target_weights = compute_multi_strategy_target_weights(
+                    signals_by_strategy,
+                    self._config.risk,
+                    self._config.trend.vol_floor_annualized,
+                )
             execution_date = next_execution_date(
                 calendar, decision_date, self._config.backtest.execution_delay_sessions
             )
