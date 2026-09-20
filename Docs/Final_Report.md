@@ -254,3 +254,29 @@ Everything about real-world performance: no real market data, no live-verified v
 
 ### What should be tested next
 Real-data replication via the now-built vendor adapters (starting with a live smoke test), the regime-diagnostics module, the missing metrics/benchmarks, and only then a fresh look at whether the whipsaw pattern found on synthetic data has any real-market analogue — each as its own logged, falsifiable experiment, not as a retuning of the frozen baseline.
+
+---
+
+## Addendum: India NSE+MCX Blended System (separate research document)
+
+A second, India-specific research document (`India NSE + MCX Quantitative Trading Research...`, user-supplied PDF, full extraction in `Docs/India_Implementation_Spec.md`) specified two primary hypotheses — `EQ_MOM_01` (NSE cross-sectional equity momentum) and `MCX_TREND_01` (MCX diversified time-series trend) — to be blended into one portfolio at 50:50 ex-ante risk, plus `MCX_CARRY_01` as a standalone-only complementary challenger. Built autonomously per explicit user instruction ("flag it and move on"); every open question encountered is flagged below and in `Docs/India_Implementation_Spec.md`, not left silently resolved.
+
+**Implemented**: `CrossSectionalMomentumStrategy`, `MCXTrendSleeve`, `MCXCarryStrategy`, a new `BlendedPortfolioEngine` supporting per-sleeve rebalance frequencies (monthly/daily coexisting) and contract-roll resolution, a rolling-covariance portfolio-vol estimator, an itemized India transaction-cost model, synthetic NSE-equity and multi-expiry MCX-commodity data, and the exact discovery/validation/holdout date split the research specifies. 149 tests pass across the whole project (up from 90).
+
+**A real bug was found and fixed during integration**: `CrossSectionalMomentumStrategy` initially scored every instrument in the shared NSE+MCX universe, not just NSE equities, because it had only ever been tested standalone. Caught by a manual smoke test before any formal test existed for it; a regression test now guards it (`tests/unit/test_cross_sectional_momentum.py::test_ignores_non_equity_instruments_in_a_shared_universe`).
+
+**A result requiring a loud caveat**: on synthetic data, `MCX_CARRY_01` shows a strong standalone Sharpe (+0.92) and passes its own activation gate, while both trend sleeves are flat-to-negative. This is very likely a **synthetic-data construction artifact** — the carry signal reads today's curve slope with zero lag, while trend signals are backward-looking averages that lag a regime change, so carry "sees" the fabricated persistent regime faster than trend does by construction, not because real carry outperforms real trend. `IndiaSystemConfig` hard-blocks `mcx_carry_01` from ever getting a nonzero blended risk share regardless of this result — a synthetic pass changes nothing about the real gate, by design.
+
+**Explicitly not implemented / flagged gaps**: real NSE/MCX data (synthetic only, same limitation as the global system), the EQ_MOM_01 rank-buffer hysteresis challenger, PBO (Probability of Backtest Overfitting) diagnostic, block-bootstrap/trade-order-permutation Monte Carlo, versioned exchange-calendar data beyond a single transcribed snapshot, most real instrument-master fields, the NSE quality challenger, options features, ML challengers, circuit-breaker/halt simulation, intraday execution, and an MCX commodities-transaction-tax (CTT) rate (not given anywhere in the source document — defaults to 0.0, which understates true MCX cost until a real figure is found).
+
+### India System Status
+
+**RESEARCH INTERPRETED:** YES
+**IMPLEMENTATION COMPLETE:** PARTIAL — the two priority-one sleeves, the blend, and the standalone carry challenger are built and tested; hysteresis buffer, PBO, Monte Carlo, quality/ML/options challengers, and real exchange-calendar data are not.
+**BACKTEST COMPLETE:** YES, synthetic data only.
+**OUT-OF-SAMPLE TEST COMPLETE:** PARTIAL — the exact discovery/validation/holdout split from the research is implemented and run; not meaningful without real data.
+**WALK-FORWARD TEST COMPLETE:** NOT DONE for this system yet (same caveat as the global system: no fitted parameters exist to walk forward on).
+**STRESS TEST COMPLETE:** PARTIAL — 2×/3× cost stress via `IndiaCostConfig.scenario` exists; the research's full mandatory stress list (COVID-2020 subperiod, five worst weeks, roll-timing ±3 sessions, individual-commodity/sector removal, covariance shocks, missing-data scenarios) is not yet run for this system.
+**DATA-LEAKAGE AUDIT COMPLETE:** YES — dedicated cross-sectional leakage regression test plus the same structural PIT enforcement as the rest of the codebase.
+**PAPER-TRADING READY:** NO — the blended engine has no paper-trading wrapper yet (the existing `live/paper/PaperTrader` was built against the single/multi-strategy `BacktestEngine`, not the new per-sleeve `BlendedPortfolioEngine`).
+**LIVE TRADING ENABLED:** NO.

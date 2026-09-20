@@ -10,6 +10,7 @@ real vendor is wired in.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Protocol
 
 import pandas as pd
@@ -21,6 +22,15 @@ class ContractMeta:
     asset_class: str
     currency: str = "USD"
     multiplier: float = 1.0
+    # Additive, optional fields (default to "neutral" values) so every
+    # existing DataSource/ContractMeta construction site remains valid
+    # unchanged -- added for the India NSE+MCX system (Docs/India_Implementation_Spec.md):
+    # `sector` supports EQ_MOM_01's sector concentration cap; `underlying` +
+    # `expiry_date` let multiple dated contracts (e.g. MCX_TREND_01/MCX_CARRY_01's
+    # front/next contracts) be grouped and rolled without guessing from the symbol string.
+    sector: str = ""
+    underlying: str = ""
+    expiry_date: date | None = None
 
 
 class DataSource(Protocol):

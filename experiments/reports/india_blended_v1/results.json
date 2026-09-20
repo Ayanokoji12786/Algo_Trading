@@ -1,0 +1,96 @@
+{
+  "blended": {
+    "total_return": -0.13198201094503936,
+    "cagr": -0.010066121661082117,
+    "annualized_vol": 0.0873519666760746,
+    "sharpe": -0.06821019176520034,
+    "sortino": -0.10901472934890032,
+    "max_drawdown": -0.32258533654106514,
+    "max_drawdown_duration_days": 1244,
+    "calmar": -0.031204523333318652,
+    "avg_turnover_per_rebalance": 0.1637534516440227,
+    "total_turnover": 597.7000985006828
+  },
+  "eq_mom_01_standalone": {
+    "total_return": -0.03446106248539593,
+    "cagr": -0.0025034945051656265,
+    "annualized_vol": 0.09736341220654483,
+    "sharpe": 0.023797622303454904,
+    "sortino": 0.03800178663617763,
+    "max_drawdown": -0.3256522455006521,
+    "max_drawdown_duration_days": 845,
+    "calmar": -0.007687631636983795,
+    "avg_turnover_per_rebalance": 0.22396548748386585,
+    "total_turnover": 37.62620189728946
+  },
+  "mcx_trend_01_standalone": {
+    "total_return": -0.25784422607637414,
+    "cagr": -0.021088767048080936,
+    "annualized_vol": 0.08512477429866017,
+    "sharpe": -0.19928135393582516,
+    "sortino": -0.311757936970418,
+    "max_drawdown": -0.3693866163825049,
+    "max_drawdown_duration_days": 3398,
+    "calmar": -0.05709131330909734,
+    "avg_turnover_per_rebalance": 0.3015547086929335,
+    "total_turnover": 1100.6746867292072
+  },
+  "mcx_carry_01_standalone": {
+    "total_return": 2.025870612172065,
+    "cagr": 0.08235562567098742,
+    "annualized_vol": 0.08733000483046585,
+    "sharpe": 0.9191055229290158,
+    "sortino": 1.5152086810174386,
+    "max_drawdown": -0.15231503240488964,
+    "max_drawdown_duration_days": 501,
+    "calmar": 0.5406926970416587,
+    "avg_turnover_per_rebalance": 0.11150695260761719,
+    "total_turnover": 407.00037701780275
+  },
+  "mcx_carry_01_activation_gate": {
+    "positive_net_value_after_base_costs": true,
+    "survives_2x_cost_stress": true,
+    "low_correlation_with_trend": true,
+    "measured_correlation_with_trend": 0.011643032465001656,
+    "passes_implemented_subset_of_gate": true,
+    "note": "This does not evaluate parameter stability or cross-fold/regime portfolio improvement -- see this module's docstring. A True result here is necessary, not sufficient, for enabling carry."
+  },
+  "validation_split": {
+    "discovery": {
+      "status": "OK",
+      "n_days": 2347,
+      "total_return": -0.013467749566565268,
+      "cagr": -0.0015060226133787324,
+      "annualized_vol": 0.08561094426178302,
+      "sharpe": 0.02577000328738479,
+      "sortino": 0.04026547993745095,
+      "max_drawdown": -0.19565736549157453,
+      "max_drawdown_duration_days": 1244,
+      "calmar": -0.007697244668479324
+    },
+    "validation": {
+      "status": "OK",
+      "n_days": 1044,
+      "total_return": -0.1291880795864837,
+      "cagr": -0.03403697381562265,
+      "annualized_vol": 0.0904454357342943,
+      "sharpe": -0.32432210441286113,
+      "sortino": -0.5370606046131905,
+      "max_drawdown": -0.2995205939511938,
+      "max_drawdown_duration_days": 585,
+      "calmar": -0.1136381754810786
+    },
+    "holdout": {
+      "status": "OK",
+      "n_days": 260,
+      "total_return": 0.014505717192276668,
+      "cagr": 0.014677738105022708,
+      "annualized_vol": 0.09064370797497116,
+      "sharpe": 0.1997236197883164,
+      "sortino": 0.333868953691781,
+      "max_drawdown": -0.14597207712847693,
+      "max_drawdown_duration_days": 204,
+      "calmar": 0.10055168353947679
+    }
+  }
+}
