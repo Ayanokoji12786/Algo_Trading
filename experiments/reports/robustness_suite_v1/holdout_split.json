@@ -1,0 +1,27 @@
+{
+  "in_sample": {
+    "total_return": -0.1758187358129747,
+    "cagr": -0.01002594481378305,
+    "annualized_vol": 0.05929107191157341,
+    "sharpe": -0.1344963341343786,
+    "sortino": -0.2181044964081507,
+    "max_drawdown": -0.2818366312946786,
+    "max_drawdown_duration_days": 2312,
+    "calmar": -0.03557360435272968,
+    "avg_turnover_per_rebalance": 0.41609899823825647,
+    "total_turnover": 416.51509723649474
+  },
+  "holdout": {
+    "total_return": -0.05570417815169859,
+    "cagr": -0.011884606056606684,
+    "annualized_vol": 0.06043196833982646,
+    "sharpe": -0.16085254995558074,
+    "sortino": -0.26802096427441174,
+    "max_drawdown": -0.19875076910987988,
+    "max_drawdown_duration_days": 1015,
+    "calmar": -0.0597965286365068,
+    "avg_turnover_per_rebalance": 0.4512713950055008,
+    "total_turnover": 113.2691201463807
+  },
+  "split_date": "2019-03-14 00:00:00"
+}
