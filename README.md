@@ -243,7 +243,7 @@ needed for anything below — everything runs against synthetic data out of the 
 python -m pytest -q
 ```
 
-You should see `202 passed` after roughly a minute and a half. That's the whole "is my
+You should see `215 passed` after roughly a minute and a half. That's the whole "is my
 install correct" check.
 
 Whenever you come back to a fresh terminal later, you only need to repeat the **activate**
@@ -342,7 +342,7 @@ flag.
 ## Testing
 
 ```bash
-python -m pytest -q          # all 202 tests, ~1.5 minutes
+python -m pytest -q          # all 215 tests, ~1.5 minutes
 python -m pytest tests/unit  # fast, isolated
 python -m pytest tests/integration  # full pipeline + leakage + parity tests
 ```

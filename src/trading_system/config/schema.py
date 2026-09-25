@@ -116,6 +116,28 @@ class BacktestConfig:
     execution_delay_sessions: int = 0
     initial_capital: float = 1_000_000.0
 
+    def __post_init__(self) -> None:
+        # The plain BacktestEngine treats any frequency != "daily" as
+        # "weekly", so a typo ("weeky", "monthly") would silently run as
+        # weekly rather than error. Fail loud instead. Note the plain engine
+        # supports only daily/weekly (monthly lives in the blended engine).
+        if self.rebalance_frequency not in ("daily", "weekly"):
+            raise ValueError(
+                f"BacktestConfig.rebalance_frequency={self.rebalance_frequency!r} "
+                "must be 'daily' or 'weekly'."
+            )
+        # A negative delay is look-ahead bias (see execution/simulator.py).
+        if self.execution_delay_sessions < 0:
+            raise ValueError(
+                f"BacktestConfig.execution_delay_sessions="
+                f"{self.execution_delay_sessions} must be >= 0 (a negative "
+                "delay would execute before the decision date -- look-ahead)."
+            )
+        if self.initial_capital <= 0:
+            raise ValueError(
+                f"BacktestConfig.initial_capital={self.initial_capital} must be positive."
+            )
+
 
 @dataclass(frozen=True)
 class SystemConfig:

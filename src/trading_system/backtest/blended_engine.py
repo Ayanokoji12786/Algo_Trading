@@ -53,6 +53,30 @@ class SleeveSpec:
     resolve_contracts: bool = False  # True: weights keyed by underlying, need roll resolution
     participation_cap_fraction: float | None = None  # None disables the cap
 
+    def __post_init__(self) -> None:
+        if self.rebalance_frequency not in ("daily", "weekly", "monthly"):
+            raise ValueError(
+                f"SleeveSpec.rebalance_frequency={self.rebalance_frequency!r} "
+                "must be 'daily', 'weekly', or 'monthly'."
+            )
+        # A negative delay is look-ahead bias (see execution/simulator.py).
+        if self.execution_delay_sessions < 0:
+            raise ValueError(
+                f"SleeveSpec.execution_delay_sessions="
+                f"{self.execution_delay_sessions} must be >= 0 (a negative "
+                "delay would execute before the decision date -- look-ahead)."
+            )
+        if self.risk_share < 0:
+            raise ValueError(
+                f"SleeveSpec.risk_share={self.risk_share} must be >= 0."
+            )
+        if self.participation_cap_fraction is not None and self.participation_cap_fraction <= 0:
+            raise ValueError(
+                f"SleeveSpec.participation_cap_fraction="
+                f"{self.participation_cap_fraction} must be > 0 when set "
+                "(use None to disable the cap)."
+            )
+
 
 # ---- Shared helpers (module-level so BlendedPaperTrader can call the SAME
 # functions BlendedPortfolioEngine calls -- prevents silent drift between the
